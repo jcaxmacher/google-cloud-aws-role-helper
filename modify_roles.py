@@ -3,8 +3,8 @@ Modify the AWS IAM roles associated with a Google Apps Directory User
 
 Example usage:
 
-$ python modify_roles.py <aws credential profile name> <email address> \
-    <ADD or REMOVE> <AWS role name>
+$ python modify_roles.py <aws credential profile name> \
+    <SAML provider name in AWS> <email address> <ADD or REMOVE> <AWS role name>
 """
 from __future__ import print_function
 import os
@@ -42,15 +42,15 @@ def write_files(aws_profile):
     os.remove(os.path.join(script_path, 'credentials.json'))
 
 
-def get_role_arn_template(aws_profile):
+def get_role_arn_template(aws_profile, saml_provider):
     """Create a role arn template using the AWS account ID."""
     session = boto3.Session(profile_name=aws_profile)
     client = session.client('sts')
     print('Getting AWS account ID')
     identity = client.get_caller_identity()
     account_id = identity['Account']
-    samlprovider_arn = 'arn:aws:iam::{}:saml-provider/GoogleApps'.format(
-        account_id
+    samlprovider_arn = 'arn:aws:iam::{}:saml-provider/{}'.format(
+        account_id, saml_provider
     )
     role_arn_template = 'arn:aws:iam::{}:role/{},{}'.format(
         account_id, '{}', samlprovider_arn
@@ -58,9 +58,9 @@ def get_role_arn_template(aws_profile):
     return role_arn_template
 
 
-def modify_roles(aws_profile, user_key, action, role_name):
+def modify_roles(aws_profile, saml_provider, user_key, action, role_name):
     """Add or remove an IAM Role from a user in the Google Directory"""
-    role_arn_template = get_role_arn_template(aws_profile)
+    role_arn_template = get_role_arn_template(aws_profile, saml_provider)
     store = file.Storage('token.json')
     creds = store.get()
     if not creds or creds.invalid:
@@ -91,6 +91,6 @@ def modify_roles(aws_profile, user_key, action, role_name):
 
 
 if __name__ == '__main__':
-    aws_profile, user_key, action, role_name = sys.argv[1:]
+    aws_profile, saml_provider, user_key, action, role_name = sys.argv[1:]
     with write_files(aws_profile):
-        modify_roles(aws_profile, user_key, action, role_name)
+        modify_roles(aws_profile, saml_provider, user_key, action, role_name)

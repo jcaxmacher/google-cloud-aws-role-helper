@@ -11,6 +11,7 @@ import os
 import sys
 from io import StringIO
 from pprint import pprint
+from contextlib import contextmanager
 
 import boto3
 from googleapiclient.discovery import build
@@ -19,21 +20,26 @@ from oauth2client import file, client, tools
 
 
 SCOPES = 'https://www.googleapis.com/auth/admin.directory.user'
-SCRIPT_PATH = os.path.dirname(os.path.realpath(__file__))
 
 
+@contextmanager
 def write_files(aws_profile):
     """Write credentials files for Google Apps access"""
+    script_path = os.path.dirname(os.path.realpath(__file__))
     session = boto3.Session(profile_name=aws_profile)
     client = session.client('secretsmanager')
     print('Getting Google Apps token')
     token = client.get_secret_value(SecretId='GoogleAppsToken')['SecretString']
-    with open(os.path.join(SCRIPT_PATH, 'token.json'), 'w') as f:
+    with open(os.path.join(script_path, 'token.json'), 'w') as f:
         f.write(token)
     print('Getting Google Apps credentials')
     credentials = client.get_secret_value(SecretId='GoogleAppsCredentials')['SecretString']
-    with open(os.path.join(SCRIPT_PATH, 'credentials.json'), 'w') as f:
+    with open(os.path.join(script_path, 'credentials.json'), 'w') as f:
         f.write(credentials)
+    yield
+    print('Removing token.json and credentials.json')
+    os.remove(os.path.join(script_path, 'token.json'))
+    os.remove(os.path.join(script_path, 'credentials.json'))
 
 
 def get_role_arn_template(aws_profile):
@@ -52,7 +58,7 @@ def get_role_arn_template(aws_profile):
     return role_arn_template
 
 
-def main(aws_profile, user_key, action, role_name):
+def modify_roles(aws_profile, user_key, action, role_name):
     """Add or remove an IAM Role from a user in the Google Directory"""
     role_arn_template = get_role_arn_template(aws_profile)
     store = file.Storage('token.json')
@@ -85,7 +91,6 @@ def main(aws_profile, user_key, action, role_name):
 
 
 if __name__ == '__main__':
-    write_files(sys.argv[1])
-    main(*sys.argv[1:])
-    os.remove(os.path.join(SCRIPT_PATH, 'token.json'))
-    os.remove(os.path.join(SCRIPT_PATH, 'credentials.json'))
+    aws_profile, user_key, action, role_name = sys.argv[1:]
+    with write_files(aws_profile):
+        modify_roles(aws_profile, user_key, action, role_name)
